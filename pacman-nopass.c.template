@@ -1,0 +1,48 @@
+#include <stdio.h>
+#include <pwd.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/wait.h>
+#define R_C "\e[m"
+#define G_C "\e[32m"
+#define E_C "\e[31m"
+
+int e(int ret, char * func_name) {
+    if ( ret == -1 ) {
+        fprintf(stderr, E_C "[*]" R_C " Error in %s: ", func_name);
+        perror("");
+        exit(99);
+    }
+    return ret;
+}
+
+int main(int argc, char *argv[]) {
+    printf(G_C "[*]" R_C " Using setuid wrapper to pacman\n");
+    struct passwd * pwd = getpwuid(getuid());
+    if ( pwd == NULL ) {
+        fprintf(stderr, E_C "[*]" R_C " Error getting user info: ");
+        perror("");
+        exit(99);
+    }
+    if ( (strcmp(pwd->pw_name, "{{name}}") == 0 && pwd->pw_uid == {{uid}}) || (strcmp(pwd->pw_name, "root") == 0 && pwd->pw_uid == 0) ) {
+        printf(G_C "[*]" R_C " Authenticated as %s\n", pwd->pw_name);
+        printf(G_C "[*]" R_C " Elevating to root\n");
+        e(setuid(0), "setuid");
+        printf(G_C "[*]" R_C " Running pacman\n");
+        argv[0] = "pacman";
+        if ( fork() == 0 ) {
+            e(execv("/usr/bin/pacman", argv), "execv");
+        } else {
+            e(wait(NULL), "wait");
+            printf(G_C "[*]" R_C " Done, exiting\n");
+        }
+    } else {
+        fprintf(stderr, E_C "[*]" R_C " Unrecognized username %s (%d), not authorized.\n", pwd->pw_name, pwd->pw_uid);
+        fprintf(stderr, E_C "[*]" R_C " Exiting\n");
+        exit(99);
+    }
+
+    
+}
